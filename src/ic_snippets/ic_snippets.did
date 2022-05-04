@@ -1,3 +1,61 @@
+type install_args = record {
+    all_nodes: vec text;
+};
+
+type init_canister_manager_param = record {
+    args: opt install_args;
+};
+
+type migrate_args = record {
+    data: blob;
+};
+
+type wasm_init_args = record {
+    position: nat8;
+    wasm_chunk: blob;
+};
+
+type canister_manager_event = variant {
+ NodeCreated: text; 
+ NodeDeleted: text;
+ Migrate: migrate_args;
+};
+
+type snippet_input = record {
+   content: text;
+   id: text;
+};
+
+type snippet = record {
+    content: text;
+    owner: principal;
+    id: text;
+    timestamp: nat64;
+};
+
+type update_result = record {
+    canister_id: principal;
+    result: bool;
+};
+
+type pagination = record {
+    canister_id: principal;
+    page: text;
+};
+
+type list_snippet_result = record {
+    snippets: vec snippet;
+    canister_id: principal;
+    next: opt pagination;
+    prev: opt pagination;
+};
+
 service : {
-    "greet": (text) -> (text) query;
+   "init_canister_manager":(init_canister_manager_param)-> ();
+   "handle_event":(canister_manager_event)->();
+   "init_wasm":(wasm_init_args)->(bool);
+   "update_snippet":(snippet_input)->(update_result);
+   "add_snippet":(snippet_input)->(update_result);
+   "delete_snippet":(text)->(update_result);
+   "list_snippets":(text)->(list_snippet_result) query;
 }
