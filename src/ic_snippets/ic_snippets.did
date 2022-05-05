@@ -35,7 +35,12 @@ type snippet = record {
 
 type update_result = record {
     canister_id: principal;
-    result: bool;
+    value: bool;
+};
+
+type update_response = variant {
+    Ok: update_result;
+    Err: text;
 };
 
 type pagination = record {
@@ -54,8 +59,8 @@ service : {
    "init_canister_manager":(init_canister_manager_param)-> ();
    "handle_event":(canister_manager_event)->();
    "init_wasm":(wasm_init_args)->(bool);
-   "update_snippet":(snippet_input)->(update_result);
-   "add_snippet":(snippet_input)->(update_result);
-   "delete_snippet":(text)->(update_result);
+   "update_snippet":(snippet_input)->(update_response);
+   "add_snippet":(snippet_input)->(update_response);
+   "delete_snippet":(text)->(update_response);
    "list_snippets":(text)->(list_snippet_result) query;
 }

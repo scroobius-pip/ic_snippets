@@ -1,0 +1,79 @@
+// This is an experimental feature to generate Rust binding from Candid.
+// You may want to manually adjust some of the types.
+use ic_cdk::export::candid::{self, CandidType, Deserialize};
+use ic_cdk::api::call::CallResult;
+
+#[derive(CandidType, Deserialize)]
+struct snippet_input { id: String, content: String }
+
+#[derive(CandidType, Deserialize)]
+struct update_result { value: bool, canister_id: candid::Principal }
+
+#[derive(CandidType, Deserialize)]
+enum update_response { ok(update_result), err(String) }
+
+#[derive(CandidType, Deserialize)]
+struct migrate_args { data: Vec<u8> }
+
+#[derive(CandidType, Deserialize)]
+enum canister_manager_event {
+  Migrate(migrate_args),
+  NodeCreated(String),
+  NodeDeleted(String),
+}
+
+#[derive(CandidType, Deserialize)]
+struct install_args { all_nodes: Vec<String> }
+
+#[derive(CandidType, Deserialize)]
+struct init_canister_manager_param { args: Option<install_args> }
+
+#[derive(CandidType, Deserialize)]
+struct wasm_init_args { position: u8, wasm_chunk: Vec<u8> }
+
+#[derive(CandidType, Deserialize)]
+struct pagination { page: String, canister_id: candid::Principal }
+
+#[derive(CandidType, Deserialize)]
+struct snippet {
+  id: String,
+  content: String,
+  owner: candid::Principal,
+  timestamp: u64,
+}
+
+#[derive(CandidType, Deserialize)]
+struct list_snippet_result {
+  next: Option<pagination>,
+  prev: Option<pagination>,
+  canister_id: candid::Principal,
+  snippets: Vec<snippet>,
+}
+
+struct SERVICE(candid::Principal);
+impl SERVICE{
+  pub async fn add_snippet(&self, arg0: snippet_input) -> CallResult<
+    (update_response,)
+  > { ic_cdk::call(self.0, "add_snippet", (arg0,)).await }
+  pub async fn delete_snippet(&self, arg0: String) -> CallResult<
+    (update_response,)
+  > { ic_cdk::call(self.0, "delete_snippet", (arg0,)).await }
+  pub async fn handle_event(&self, arg0: canister_manager_event) -> CallResult<
+    ()
+  > { ic_cdk::call(self.0, "handle_event", (arg0,)).await }
+  pub async fn init_canister_manager(
+    &self,
+    arg0: init_canister_manager_param,
+  ) -> CallResult<()> {
+    ic_cdk::call(self.0, "init_canister_manager", (arg0,)).await
+  }
+  pub async fn init_wasm(&self, arg0: wasm_init_args) -> CallResult<(bool,)> {
+    ic_cdk::call(self.0, "init_wasm", (arg0,)).await
+  }
+  pub async fn list_snippets(&self, arg0: String) -> CallResult<
+    (list_snippet_result,)
+  > { ic_cdk::call(self.0, "list_snippets", (arg0,)).await }
+  pub async fn update_snippet(&self, arg0: snippet_input) -> CallResult<
+    (update_response,)
+  > { ic_cdk::call(self.0, "update_snippet", (arg0,)).await }
+}

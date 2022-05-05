@@ -8,10 +8,25 @@ pub struct SnippetKey {
 }
 
 impl SnippetKey {
-    pub fn new(snippet_id: String, page_id: u32) -> Self {
+    pub fn new(snippet_id: String, page_id: String) -> Self {
         Self {
             value: format!("{}_{}", snippet_id, page_id),
         }
+    }
+
+    pub fn from_string(s: String) -> Result<Self, ()> {
+        let parts: Vec<&str> = s.split("_").collect();
+        if parts.len() != 2 {
+            return Err(());
+        }
+        let snippet_id = parts[0].to_string();
+
+        let page_id = parts[1].to_string();
+        Ok(Self::new(snippet_id, page_id))
+    }
+
+    pub fn page_id(&self) -> String {
+        self.value.split("_").last().unwrap().to_string()
     }
 }
 
@@ -47,14 +62,14 @@ impl PartialOrd for Snippet {
     }
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, CandidType, Deserialize)]
 pub struct SnippetInput {
     pub content: String,
     pub id: String,
 }
 
 impl SnippetInput {
-    pub fn to_snippet(self, owner: Principal, page_id: u32) -> Snippet {
+    pub fn to_snippet(self, owner: Principal, page_id: String) -> Snippet {
         let snippet_key = SnippetKey::new(self.id, page_id);
         Snippet {
             content: self.content,
