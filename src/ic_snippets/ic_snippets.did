@@ -55,6 +55,17 @@ type list_snippet_result = record {
     prev: opt pagination;
 };
 
+type get_snippet_result = variant {
+    Snippet: opt snippet;
+    CanisterId: principal;
+};
+
+type get_snippet_response = variant {
+    Ok: get_snippet_result;
+    Err: text;
+};
+
+
 service : {
    "init_canister_manager":(init_canister_manager_param)-> ();
    "handle_event":(canister_manager_event)->();
@@ -63,4 +74,5 @@ service : {
    "add_snippet":(snippet_input)->(update_response);
    "delete_snippet":(text)->(update_response);
    "list_snippets":(text)->(list_snippet_result) query;
+   "get_snippet":(text)->(get_snippet_response) query;
 }

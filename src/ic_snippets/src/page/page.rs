@@ -34,8 +34,8 @@ impl Page {
     }
 
     pub fn add_snippet(&mut self, snippet: SnippetInput, owner: Principal) -> AddSnippetResult {
-        if self.snippets.len() >= self.max_size {
-            let mut new_page = Page::new(self.max_size, snippet.id);
+        if self.snippets.len() > self.max_size {
+            let mut new_page = Page::new(self.max_size, snippet.id.clone());
             new_page.add_snippet(snippet, owner);
             return AddSnippetResult::Overflow(new_page);
         }

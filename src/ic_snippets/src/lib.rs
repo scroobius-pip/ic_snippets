@@ -40,11 +40,23 @@ struct ListSnippetResult {
     snippets: Vec<Snippet>,
 }
 
+#[derive(CandidType, Deserialize)]
+pub enum GetSnippetResponse {
+    Ok(GetSnippetResult),
+    Err(String),
+}
+
+#[derive(CandidType, Deserialize)]
+pub enum GetSnippetResult {
+    Snippet(Option<Principal>),
+    CanisterId(Principal),
+}
+
 #[update]
-pub async fn update_snippet(snippet: SnippetInput) -> UpdateResponse {
+pub async fn update_snippet(snippet_input: SnippetInput) -> UpdateResponse {
     let canister_manager = unsafe { CANISTER_MANAGER.as_mut().unwrap() };
 
-    let SnippetInput { content, id } = snippet.clone();
+    let SnippetInput { content, id } = snippet_input.clone();
 
     let snippet_key = match SnippetKey::from_string(id) {
         Ok(snippet_key) => snippet_key,
@@ -71,7 +83,7 @@ pub async fn update_snippet(snippet: SnippetInput) -> UpdateResponse {
             let result = CanisterManager::<Page>::forward_request::<UpdateResponse, _, _>(
                 canister_id,
                 "update_snippet",
-                (snippet,),
+                (snippet_input,),
             )
             .await;
 
@@ -96,11 +108,11 @@ pub async fn update_snippet(snippet: SnippetInput) -> UpdateResponse {
 #[update]
 pub async fn add_snippet(snippet: SnippetInput) -> UpdateResponse {
     let canister_manager = unsafe { CANISTER_MANAGER.as_mut().unwrap() };
-    let page_id = unsafe { PAGE_ID.clone().unwrap() };
+    let mut current_page_id = unsafe { PAGE_ID.clone().unwrap() };
 
     let result = canister_manager
         .canister
-        .with_upsert_data_mut(page_id.to_string(), |page| {
+        .with_upsert_data_mut(current_page_id.to_string(), |page| {
             page.add_snippet(snippet.clone(), ic::caller())
         });
 
@@ -129,6 +141,8 @@ pub async fn add_snippet(snippet: SnippetInput) -> UpdateResponse {
                     let result = canister_manager.canister.with_upsert_data_mut(
                         new_page.id.clone(),
                         |page| {
+                            let new_page_id = new_page.id.clone();
+                            current_page_id = new_page_id;
                             *page = new_page;
                         },
                     );
@@ -157,6 +171,37 @@ pub async fn add_snippet(snippet: SnippetInput) -> UpdateResponse {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+#[query]
+pub fn get_snippet(id: String) -> GetSnippetResponse {
+    let canister_manager = unsafe { CANISTER_MANAGER.as_mut().unwrap() };
+    let snippet_key = match SnippetKey::from_string(id) {
+        Ok(snippet_key) => snippet_key,
+        Err(_) => return GetSnippetResponse::Err("Snippet key not found or invalid".to_string()),
+    };
+
+    let result = canister_manager
+        .canister
+        .with_data_mut(snippet_key.page_id(), |page| {
+            let snippet = page.get_snippet(&snippet_key);
+            snippet.map(|snippet| snippet.clone())
+        });
+
+    match result {
+        NodeResult::NodeId(canister_id) => {
+            GetSnippetResponse::Ok(GetSnippetResult::CanisterId(canister_id))
+        }
+        NodeResult::Result(result) => {
+            let result = result.expect("Canister not found");
+            match result {
+                Some(snippet) => {
+                    GetSnippetResponse::Ok(GetSnippetResult::Snippet(Some(snippet.owner)))
+                }
+                None => GetSnippetResponse::Ok(GetSnippetResult::Snippet(None)),
             }
         }
     }
