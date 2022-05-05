@@ -1,12 +1,12 @@
-use std::collections::BTreeMap;
-use std::ops::Add;
-use ic_cdk::export::serde::de::DeserializeOwned;
-use ic_kit::ic;
-use ic_kit::ic::time;
+use super::snippet::{Snippet, SnippetInput, SnippetKey};
 use candid::CandidType;
 use candid::Deserialize;
 use candid::Principal;
-use super::snippet::{Snippet,SnippetKey,SnippetInput};
+use ic_cdk::export::serde::de::DeserializeOwned;
+use ic_kit::ic;
+use ic_kit::ic::time;
+use std::collections::BTreeMap;
+use std::ops::Add;
 
 pub enum AddSnippetResult {
     Added,
@@ -19,11 +19,11 @@ pub struct Page {
     pub next_page: Option<String>,
     pub prev_page: Option<String>,
     pub max_size: usize,
-    pub id: u32,
+    pub id: String,
 }
 
 impl Page {
-    pub fn new(max_size: usize, id: u32) -> Self {
+    pub fn new(max_size: usize, id: String) -> Self {
         Self {
             snippets: Default::default(),
             next_page: None,
@@ -35,7 +35,8 @@ impl Page {
 
     pub fn add_snippet(&mut self, snippet: SnippetInput, owner: Principal) -> AddSnippetResult {
         if self.snippets.len() >= self.max_size {
-            let new_page = Page::new(self.max_size, self.id.add(1));
+            let mut new_page = Page::new(self.max_size, snippet.id);
+            new_page.add_snippet(snippet, owner);
             return AddSnippetResult::Overflow(new_page);
         }
 

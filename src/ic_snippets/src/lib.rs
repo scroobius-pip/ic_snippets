@@ -1,6 +1,7 @@
 mod page;
 use candid::{CandidType, Deserialize, Principal};
 use ic_kit::{ic, macros::*};
+use page::page::AddSnippetResult;
 use page::page::Page;
 use page::snippet::Snippet;
 use page::snippet::SnippetInput;
@@ -11,7 +12,7 @@ use scaled_storage::node_manager::{
 };
 
 static mut CANISTER_MANAGER: Option<CanisterManager<Page>> = None;
-static mut PAGE_ID: Option<String> = Some("initial".to_string());
+static mut PAGE_ID: Option<String> = None;
 
 #[derive(CandidType, Deserialize)]
 struct UpdateResult {
@@ -39,8 +40,9 @@ struct ListSnippetResult {
     snippets: Vec<Snippet>,
 }
 
+#[update]
 pub async fn update_snippet(snippet: SnippetInput) -> UpdateResponse {
-    let mut canister_manager = unsafe { CANISTER_MANAGER.as_mut().unwrap() };
+    let canister_manager = unsafe { CANISTER_MANAGER.as_mut().unwrap() };
 
     let SnippetInput { content, id } = snippet.clone();
 
@@ -49,21 +51,20 @@ pub async fn update_snippet(snippet: SnippetInput) -> UpdateResponse {
         Err(_) => return UpdateResponse::Err("Snippet key not found or invalid".to_string()),
     };
 
-    let result =
-        canister_manager
-            .canister
-            .with_upsert_data_mut(snippet_key.page_id(), |page| {
-                match page.get_snippet(&snippet_key) {
-                    Some(snippet) => {
-                        let owner = snippet.owner;
-                        if owner != ic::caller() {
-                            return Err("Auth Error");
-                        }
-                        Ok(true)
+    let result = canister_manager
+        .canister
+        .with_upsert_data_mut(snippet_key.page_id(), |page| {
+            match page.get_snippet(&snippet_key) {
+                Some(snippet) => {
+                    let owner = snippet.owner;
+                    if owner != ic::caller() {
+                        return Err("Auth Error");
                     }
-                    None => Err("Could not find snippet"),
+                    Ok(true)
                 }
-            });
+                None => Err("Could not find snippet"),
+            }
+        });
 
     match result {
         NodeResult::NodeId(canister_id) => {
@@ -88,19 +89,77 @@ pub async fn update_snippet(snippet: SnippetInput) -> UpdateResponse {
                 }),
                 Err(message) => UpdateResponse::Err(message.to_string()),
             }
-        },
+        }
     }
 }
 
-pub fn add_snippet(snippet: SnippetInput) -> UpdateResult {
-    let mut canister_manager = unsafe { CANISTER_MANAGER.as_mut().unwrap() };
-    let page_id = unsafe { PAGE_ID.unwrap() };
+#[update]
+pub async fn add_snippet(snippet: SnippetInput) -> UpdateResponse {
+    let canister_manager = unsafe { CANISTER_MANAGER.as_mut().unwrap() };
+    let page_id = unsafe { PAGE_ID.clone().unwrap() };
 
     let result = canister_manager
         .canister
         .with_upsert_data_mut(page_id.to_string(), |page| {
-            page.add_snippet(snippet.clone(), ic::caller());
+            page.add_snippet(snippet.clone(), ic::caller())
         });
+
+    match result {
+        NodeResult::NodeId(canister_id) => {
+            let result = CanisterManager::<Page>::forward_request::<UpdateResponse, _, _>(
+                canister_id,
+                "add_snippet",
+                (snippet,),
+            )
+            .await;
+
+            match result {
+                Ok(response) => response,
+                Err(message) => UpdateResponse::Err(message),
+            }
+        }
+        NodeResult::Result(result) => {
+            let result = result.expect("Canister not found");
+            match result {
+                AddSnippetResult::Added => UpdateResponse::Ok(UpdateResult {
+                    value: true,
+                    canister_id: ic::id(),
+                }),
+                AddSnippetResult::Overflow(new_page) => {
+                    let result = canister_manager.canister.with_upsert_data_mut(
+                        new_page.id.clone(),
+                        |page| {
+                            *page = new_page;
+                        },
+                    );
+
+                    match result {
+                        NodeResult::NodeId(canister_id) => {
+                            let result =
+                                CanisterManager::<Page>::forward_request::<UpdateResponse, _, _>(
+                                    canister_id,
+                                    "add_snippet",
+                                    (snippet,),
+                                )
+                                .await;
+
+                            match result {
+                                Ok(response) => response,
+                                Err(message) => UpdateResponse::Err(message),
+                            }
+                        }
+                        NodeResult::Result(result) => {
+                            result.expect("Canister not found");
+                            UpdateResponse::Ok(UpdateResult {
+                                value: true,
+                                canister_id: ic::id(),
+                            })
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 // Scaled Storage
@@ -111,7 +170,9 @@ pub fn add_snippet(snippet: SnippetInput) -> UpdateResult {
 #[init]
 fn init() {
     unsafe { CANISTER_MANAGER = Some(CanisterManager::new(ic::id(), |size| size > 1000)) }
-    unsafe { PAGE_ID = Some(0) }
+    unsafe {
+        PAGE_ID = Some("initial".to_string());
+    }
 }
 
 #[update]
