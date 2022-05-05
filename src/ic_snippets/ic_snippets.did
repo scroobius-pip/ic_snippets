@@ -1,3 +1,31 @@
+
+type NodeError = variant {
+    Migration: text;
+    ScaleUp: text;
+    Initialize: text;
+    Broadcast: text;
+};
+
+type node_info_status = variant {
+    Initialized;
+    Ready;
+    Error:NodeError;
+    ShutDown;
+    Migrating;
+    ScaleUp;
+    ScaleDown;
+};
+
+
+type node_info = record {
+    all_nodes: vec text;
+    prev_node_id: opt principal;
+    next_node_id: opt principal;
+    status: node_info_status;
+    cycles_balance: nat64;
+};
+
+
 type install_args = record {
     all_nodes: vec text;
 };
@@ -35,7 +63,7 @@ type snippet = record {
 
 type update_result = record {
     canister_id: principal;
-    value: bool;
+    snippet_id: opt text;
 };
 
 type update_response = variant {
@@ -48,11 +76,22 @@ type pagination = record {
     page: text;
 };
 
-type list_snippet_result = record {
+
+type list_snippet_result = variant {
+   Snippets: opt list_snippets;
+   CanisterId: principal;
+};
+
+type list_snippets = record {
     snippets: vec snippet;
     canister_id: principal;
     next: opt pagination;
     prev: opt pagination;
+}
+
+type list_snippets_response = variant {
+    Ok: list_snippet_result;
+    Err: text;
 };
 
 type get_snippet_result = variant {
@@ -70,9 +109,10 @@ service : {
    "init_canister_manager":(init_canister_manager_param)-> ();
    "handle_event":(canister_manager_event)->();
    "init_wasm":(wasm_init_args)->(bool);
+   "node_info": () -> (node_info) query;
    "update_snippet":(snippet_input)->(update_response);
    "add_snippet":(snippet_input)->(update_response);
    "delete_snippet":(text)->(update_response);
-   "list_snippets":(text)->(list_snippet_result) query;
+   "list_snippets":(text)->(list_snippets_response) query;
    "get_snippet":(text)->(get_snippet_response) query;
 }

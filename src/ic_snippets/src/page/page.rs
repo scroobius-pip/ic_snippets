@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::ops::Add;
 
 pub enum AddSnippetResult {
-    Added,
+    Added(String),
     Overflow(Page),
 }
 
@@ -45,14 +45,14 @@ impl Page {
         self.snippets.insert(
             snippet_key.clone(),
             Snippet {
-                content: snippet.content,
-                id: snippet_key.value,
+                content: snippet.content.clone(),
+                id: snippet_key.value.clone(),
                 owner,
                 timestamp: time(),
             },
         );
 
-        AddSnippetResult::Added
+        AddSnippetResult::Added(snippet_key.value)
     }
 
     pub fn get_snippet(&self, id: &SnippetKey) -> Option<&Snippet> {

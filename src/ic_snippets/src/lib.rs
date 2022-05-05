@@ -1,14 +1,13 @@
 mod page;
 use candid::{CandidType, Deserialize, Principal};
 use ic_kit::{ic, macros::*};
-use page::page::AddSnippetResult;
-use page::page::Page;
-use page::snippet::Snippet;
-use page::snippet::SnippetInput;
-use page::snippet::SnippetKey;
-use scaled_storage::node::NodeResult;
-use scaled_storage::node_manager::{
-    CanisterManager, CanisterManagerEvent, InitCanisterManagerParam, WasmInitArgs,
+use page::page::{AddSnippetResult, Page};
+use page::snippet::{Snippet, SnippetInput, SnippetKey};
+use scaled_storage::{
+    node::NodeResult,
+    node_manager::{
+        CanisterManager, CanisterManagerEvent, InitCanisterManagerParam, NodeInfo, WasmInitArgs,
+    },
 };
 
 static mut CANISTER_MANAGER: Option<CanisterManager<Page>> = None;
@@ -16,7 +15,7 @@ static mut PAGE_ID: Option<String> = None;
 
 #[derive(CandidType, Deserialize)]
 pub struct UpdateResult {
-    value: bool,
+    snippet_id: Option<String>,
     canister_id: Principal,
 }
 
@@ -27,17 +26,29 @@ pub enum UpdateResponse {
 }
 
 #[derive(CandidType, Deserialize)]
-struct Pagination {
+pub struct Pagination {
     page: String,
     canister_id: Principal,
 }
 
 #[derive(CandidType, Deserialize)]
-struct ListSnippetResult {
+pub struct ListSnippets {
     next: Option<Pagination>,
     prev: Option<Pagination>,
     canister_id: candid::Principal,
     snippets: Vec<Snippet>,
+}
+
+#[derive(CandidType, Deserialize)]
+pub enum ListSnippetsResponse {
+    Ok(ListSnippetsResult),
+    Err(String),
+}
+
+#[derive(CandidType, Deserialize)]
+pub enum ListSnippetsResult {
+    Snippets(Option<ListSnippets>),
+    CanisterId(Principal),
 }
 
 #[derive(CandidType, Deserialize)]
@@ -48,7 +59,7 @@ pub enum GetSnippetResponse {
 
 #[derive(CandidType, Deserialize)]
 pub enum GetSnippetResult {
-    Snippet(Option<Principal>),
+    Snippet(Option<Snippet>),
     CanisterId(Principal),
 }
 
@@ -94,7 +105,7 @@ pub async fn update_snippet(snippet_input: SnippetInput) -> UpdateResponse {
             let result = result.expect("Canister not found");
             match result {
                 Ok(response) => UpdateResponse::Ok(UpdateResult {
-                    value: response,
+                    snippet_id: Some(snippet_input.id),
                     canister_id: ic::id(),
                 }),
                 Err(message) => UpdateResponse::Err(message.to_string()),
@@ -108,11 +119,13 @@ pub async fn add_snippet(snippet: SnippetInput) -> UpdateResponse {
     let canister_manager = unsafe { CANISTER_MANAGER.as_mut().unwrap() };
     let mut current_page_id = unsafe { PAGE_ID.clone().unwrap() };
 
-    let result = canister_manager
-        .canister
-        .with_upsert_data_mut(current_page_id.to_string(), |page| {
-            page.add_snippet(snippet.clone(), ic::caller())
-        });
+    let result =
+        canister_manager
+            .canister
+            .with_upsert_data_mut(current_page_id.to_string(), |page| {
+                page.id = current_page_id.to_string();
+                page.add_snippet(snippet.clone(), ic::caller())
+            });
 
     match result {
         NodeResult::NodeId(canister_id) => {
@@ -131,8 +144,8 @@ pub async fn add_snippet(snippet: SnippetInput) -> UpdateResponse {
         NodeResult::Result(result) => {
             let result = result.expect("Canister not found");
             match result {
-                AddSnippetResult::Added => UpdateResponse::Ok(UpdateResult {
-                    value: true,
+                AddSnippetResult::Added(snippet_id) => UpdateResponse::Ok(UpdateResult {
+                    snippet_id: Some(snippet_id),
                     canister_id: ic::id(),
                 }),
                 AddSnippetResult::Overflow(new_page) => {
@@ -141,7 +154,8 @@ pub async fn add_snippet(snippet: SnippetInput) -> UpdateResponse {
                         |page| {
                             let new_page_id = new_page.id.clone();
                             current_page_id = new_page_id;
-                            *page = new_page;
+                            *page = new_page.clone();
+                            new_page.id
                         },
                     );
 
@@ -160,13 +174,10 @@ pub async fn add_snippet(snippet: SnippetInput) -> UpdateResponse {
                                 Err(message) => UpdateResponse::Err(message),
                             }
                         }
-                        NodeResult::Result(result) => {
-                            result.expect("Canister not found");
-                            UpdateResponse::Ok(UpdateResult {
-                                value: true,
-                                canister_id: ic::id(),
-                            })
-                        }
+                        NodeResult::Result(result) => UpdateResponse::Ok(UpdateResult {
+                            snippet_id: Some(result.expect("Canister not found")),
+                            canister_id: ic::id(),
+                        }),
                     }
                 }
             }
@@ -196,12 +207,65 @@ pub fn get_snippet(id: String) -> GetSnippetResponse {
         NodeResult::Result(result) => {
             let result = result.expect("Canister not found");
             match result {
-                Some(snippet) => {
-                    GetSnippetResponse::Ok(GetSnippetResult::Snippet(Some(snippet.owner)))
-                }
+                Some(snippet) => GetSnippetResponse::Ok(GetSnippetResult::Snippet(Some(snippet))),
                 None => GetSnippetResponse::Ok(GetSnippetResult::Snippet(None)),
             }
         }
+    }
+}
+
+#[query]
+pub fn get_snippets(page_id: String) -> ListSnippetsResponse {
+    let canister_manager = unsafe { CANISTER_MANAGER.as_mut().unwrap() };
+
+    let result = canister_manager
+        .canister
+        .with_data_mut(page_id, |page| page.clone());
+
+    match result {
+        NodeResult::NodeId(canister_id) => {
+            ListSnippetsResponse::Ok(ListSnippetsResult::CanisterId(canister_id))
+        }
+        NodeResult::Result(result) => match result {
+            Some(page) => {
+                ListSnippetsResponse::Ok(ListSnippetsResult::Snippets(Some(ListSnippets {
+                    snippets: page
+                        .get_snippets()
+                        .iter()
+                        .map(|&snippet| snippet.clone())
+                        .collect(),
+                    canister_id: ic::id(),
+
+                    next: match page.next_page {
+                        Some(next_page) => Some(Pagination {
+                            canister_id: match canister_manager
+                                .canister
+                                .with_data_mut(next_page.clone(), |_| ())
+                            {
+                                NodeResult::NodeId(canister_id) => canister_id,
+                                _ => ic::id(),
+                            },
+                            page: next_page,
+                        }),
+                        None => None,
+                    },
+                    prev: match page.prev_page {
+                        Some(prev_page) => Some(Pagination {
+                            canister_id: match canister_manager
+                                .canister
+                                .with_data_mut(prev_page.clone(), |_| ())
+                            {
+                                NodeResult::NodeId(canister_id) => canister_id,
+                                _ => ic::id(),
+                            },
+                            page: prev_page,
+                        }),
+                        None => None,
+                    },
+                })))
+            }
+            None => ListSnippetsResponse::Err("Canister not found".to_string()),
+        },
     }
 }
 
@@ -262,4 +326,9 @@ async fn init_canister_manager(param: InitCanisterManagerParam) {
         }
         .await
     }
+}
+
+#[query]
+fn node_info() -> NodeInfo {
+    unsafe { CANISTER_MANAGER.as_mut().unwrap().node_info() }
 }
