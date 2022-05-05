@@ -15,13 +15,13 @@ static mut CANISTER_MANAGER: Option<CanisterManager<Page>> = None;
 static mut PAGE_ID: Option<String> = None;
 
 #[derive(CandidType, Deserialize)]
-struct UpdateResult {
+pub struct UpdateResult {
     value: bool,
     canister_id: Principal,
 }
 
 #[derive(CandidType, Deserialize)]
-enum UpdateResponse {
+pub enum UpdateResponse {
     Ok(UpdateResult),
     Err(String),
 }
@@ -56,9 +56,7 @@ pub enum GetSnippetResult {
 pub async fn update_snippet(snippet_input: SnippetInput) -> UpdateResponse {
     let canister_manager = unsafe { CANISTER_MANAGER.as_mut().unwrap() };
 
-    let SnippetInput { content, id } = snippet_input.clone();
-
-    let snippet_key = match SnippetKey::from_string(id) {
+    let snippet_key = match SnippetKey::from_string(snippet_input.id.clone()) {
         Ok(snippet_key) => snippet_key,
         Err(_) => return UpdateResponse::Err("Snippet key not found or invalid".to_string()),
     };
