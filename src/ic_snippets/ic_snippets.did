@@ -87,7 +87,7 @@ type list_snippets = record {
     canister_id: principal;
     next: opt pagination;
     prev: opt pagination;
-}
+};
 
 type list_snippets_response = variant {
     Ok: list_snippet_result;

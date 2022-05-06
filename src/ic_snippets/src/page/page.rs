@@ -10,16 +10,28 @@ use std::ops::Add;
 
 pub enum AddSnippetResult {
     Added(String),
-    Overflow(Page),
+    Overflow((Page,String)),
 }
 
-#[derive(Default, Clone, CandidType, Deserialize)]
+#[derive( Clone, CandidType, Deserialize)]
 pub struct Page {
     snippets: BTreeMap<SnippetKey, Snippet>,
     pub next_page: Option<String>,
     pub prev_page: Option<String>,
     pub max_size: usize,
     pub id: String,
+}
+
+impl Default for Page {
+    fn default() -> Self {
+        Page {
+            snippets: BTreeMap::new(),
+            next_page: None,
+            prev_page: None,
+            max_size: 10,
+            id: "initial".to_string(),
+        }
+    }
 }
 
 impl Page {
@@ -36,8 +48,13 @@ impl Page {
     pub fn add_snippet(&mut self, snippet: SnippetInput, owner: Principal) -> AddSnippetResult {
         if self.snippets.len() > self.max_size {
             let mut new_page = Page::new(self.max_size, snippet.id.clone());
-            new_page.add_snippet(snippet, owner);
-            return AddSnippetResult::Overflow(new_page);
+            let snippet_key = match new_page.add_snippet(snippet, owner) {
+                AddSnippetResult::Added(key) => key,
+             _=> panic!("should not happen"),
+            };
+            new_page.prev_page = Some(self.id.clone());
+            self.next_page = Some(new_page.id.clone());
+            return AddSnippetResult::Overflow((new_page, snippet_key));
         }
 
         let snippet_key = SnippetKey::new(snippet.id, self.id.clone());

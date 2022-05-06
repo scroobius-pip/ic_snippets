@@ -4,24 +4,11 @@
       "candid": "src/ic_snippets/ic_snippets.did",
       "package": "ic_snippets",
       "type": "rust"
-    },
-    "ic_snippets_assets": {
-      "dependencies": [
-        "ic_snippets"
-      ],
-      "frontend": {
-        "entrypoint": "src/ic_snippets_assets/src/index.html"
-      },
-      "source": [
-        "src/ic_snippets_assets/assets",
-        "dist/ic_snippets_assets/"
-      ],
-      "type": "assets"
     }
   },
   "defaults": {
     "build": {
-      "args": "",
+      "output": "canisters",
       "packtool": ""
     }
   },

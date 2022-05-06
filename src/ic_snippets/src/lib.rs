@@ -150,12 +150,12 @@ pub async fn add_snippet(snippet: SnippetInput) -> UpdateResponse {
                 }),
                 AddSnippetResult::Overflow(new_page) => {
                     let result = canister_manager.canister.with_upsert_data_mut(
-                        new_page.id.clone(),
+                        new_page.0.id.clone(),
                         |page| {
-                            let new_page_id = new_page.id.clone();
+                            let new_page_id = new_page.0.id.clone();
                             current_page_id = new_page_id;
-                            *page = new_page.clone();
-                            new_page.id
+                            *page = new_page.0.clone();
+                            new_page.1
                         },
                     );
 
@@ -214,8 +214,8 @@ pub fn get_snippet(id: String) -> GetSnippetResponse {
     }
 }
 
-#[query]
-pub fn get_snippets(page_id: String) -> ListSnippetsResponse {
+#[query] 
+pub fn list_snippets(page_id: String) -> ListSnippetsResponse {
     let canister_manager = unsafe { CANISTER_MANAGER.as_mut().unwrap() };
 
     let result = canister_manager
@@ -235,7 +235,6 @@ pub fn get_snippets(page_id: String) -> ListSnippetsResponse {
                         .map(|&snippet| snippet.clone())
                         .collect(),
                     canister_id: ic::id(),
-
                     next: match page.next_page {
                         Some(next_page) => Some(Pagination {
                             canister_id: match canister_manager

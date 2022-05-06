@@ -1,6 +1,7 @@
 {
   "name": "ic_snippets_assets",
   "version": "0.1.0",
+  "license": "MIT",
   "description": "Internet Computer starter application",
   "keywords": ["Internet Computer", "Motoko", "JavaScript", "Canister"],
   "scripts": {
