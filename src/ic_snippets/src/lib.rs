@@ -275,7 +275,7 @@ pub fn list_snippets(page_id: String) -> ListSnippetsResponse {
 
 #[init]
 fn init() {
-    unsafe { CANISTER_MANAGER = Some(CanisterManager::new(ic::id(), |size| size > 1000)) }
+    unsafe { CANISTER_MANAGER = Some(CanisterManager::new(ic::id(), |size| size > 2)) }
     unsafe {
         PAGE_ID = Some("initial".to_string());
     }
